@@ -1,0 +1,4 @@
+NamespaceIndentation: None
+ColumnLimit: 120
+IndentWidth: 4
+UseTab: Never
