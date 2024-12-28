@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+/.vs/LasVeg
+/LasVeg/x64/Debug
+/x64/Debug
+/LasVeg.vcxproj.user
