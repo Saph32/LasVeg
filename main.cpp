@@ -10,7 +10,8 @@ int main()
 	lv::GameEngine engine{};
     lv::RulesChecker checker{};
 
-	engine.SetupGameState(game, 2);
+	engine.SetupInitGameState(game, 2);
+    engine.SetupRound(game);
     if (checker.ValidateGameState(game)) {
         printf("Game state is valid\n");
     } else {

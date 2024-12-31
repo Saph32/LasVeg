@@ -10,6 +10,7 @@ enum { MAX_PLAYER_COUNT = 5 };
 enum { CASINO_COUNT = 6 };
 enum { DICE_COUNT = 8};
 enum { ROUND_COUNT = 4};
+enum { CASINO_MIN_MONEY_VALUE = 50};
 
 enum class DiceValue : int32_t {
     Invalid = 0,
@@ -38,6 +39,7 @@ static_assert(CASINO_COUNT == static_cast<int32_t>(DICE_VALUE_MAX),
 
 using PlayerIdx = uint32_t;
 using CasinoIdx = uint32_t;
+using DiceIndex = uint32_t;
 
 enum class Bill : int32_t {
     Invalid = 0,
@@ -78,11 +80,6 @@ struct PlayerTurnState {
     std::vector<DiceValue> white_dices;
 };
 
-struct BankEntry {
-    Bill bill = Bill::Invalid;
-    int32_t count = 0;
-};
-
 struct GameState {
     int32_t round = 0;
 
@@ -97,11 +94,14 @@ struct GameState {
 
     PlayerTurnState current_turn{};
 
-    // Todo : Change this to a vector of bills
-    std::vector<BankEntry> bank{};  
+    std::vector<Bill> bank{};  
 };
 
-constexpr BankEntry BANK_INIT_STOCK[] = {
+struct BankEntry {
+    Bill bill = Bill::Invalid;
+    int32_t count = 0;
+};
+constexpr BankEntry BANK_INIT_STOCK_TABLE[] = {
     {Bill::_10, 6},
     {Bill::_20, 8},
     {Bill::_30, 8},
@@ -118,7 +118,7 @@ struct ExtraWhiteDiceEntry {
     int32_t white_dice_count = 0;
 };
 
-constexpr ExtraWhiteDiceEntry EXTRA_WHITE_DICE_COUNT[] = {
+constexpr ExtraWhiteDiceEntry EXTRA_WHITE_DICE_COUNT_TABLE[] = {
     {2, 4},
     {3, 2},
     {4, 2},

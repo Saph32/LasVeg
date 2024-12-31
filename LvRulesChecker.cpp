@@ -1,4 +1,10 @@
 #include "LvRulesChecker.h"
+#include "LvUtils.h"
+
+#include <numeric>
+#include <array>
+#include <vector>
+#include <algorithm>
 #include <set>
 
 bool lv::RulesChecker::ValidateGameState(const GameState& rGame) const
@@ -35,7 +41,7 @@ bool lv::RulesChecker::ValidateGameState(const GameState& rGame) const
 
     // Compute the expected neutral player dice count
     int32_t neutral_dices = 0;
-    for (const ExtraWhiteDiceEntry& rEntry : EXTRA_WHITE_DICE_COUNT) {
+    for (const ExtraWhiteDiceEntry& rEntry : EXTRA_WHITE_DICE_COUNT_TABLE) {
         if (rGame.player_count == rEntry.player_count) {
             neutral_dices = rEntry.white_dice_count * rGame.player_count;
             break;
@@ -58,18 +64,14 @@ bool lv::RulesChecker::ValidateGameState(const GameState& rGame) const
     }
 
     // Each bank note bill must be either in the bank, in a casino or in a player's stock
-    for (const BankEntry& rInitBankEntry : BANK_INIT_STOCK) {
-        const int32_t expected_count = rInitBankEntry.count;
+    for (const BankEntry& rInitBankEntry : BANK_INIT_STOCK_TABLE) {
+        const size_t expected_count = rInitBankEntry.count;
         const Bill bill = rInitBankEntry.bill;
 
-        int32_t current_count = 0;
+        size_t current_count = 0;
 
         // Check bank
-        for (const BankEntry& rBank_entry : rGame.bank) {
-            if (rBank_entry.bill == bill) {
-                current_count += rBank_entry.count;
-            }
-        }
+        current_count = std::count(rGame.bank.begin(), rGame.bank.end(), bill);
 
         // Check casinos
         for (const CasinoState &rCasino : rGame.casinos) {
@@ -169,9 +171,16 @@ bool lv::RulesChecker::ValidateGameState(const GameState& rGame) const
         return false;
     }
 
-    // Bank bill count must be positive
-    for (const BankEntry &rBankEntry : rGame.bank) {
-        if (rBankEntry.count <= 0) {
+    // Casino value must be at least 50
+    for (const CasinoState &rCasino : rGame.casinos) {
+        if (GetCasinoMoneyValue(rCasino) < CASINO_MIN_MONEY_VALUE) {
+            return false;
+        }
+    }
+
+    // Players cannot have a negative amount of dices or white dices
+    for (const PlayerState &rPlayer : rGame.players) {
+        if (rPlayer.dices < 0 || rPlayer.white_dices < 0) {
             return false;
         }
     }

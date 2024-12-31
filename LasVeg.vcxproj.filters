@@ -35,6 +35,9 @@
     <ClInclude Include="LvRulesChecker.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="LvUtils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="_clang-format">
