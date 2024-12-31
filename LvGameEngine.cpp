@@ -62,6 +62,11 @@ bool lv::GameEngine::SetupRound(GameState& rGame)
         return false;
     }
 
+    return true;
+}
+
+bool lv::GameEngine::StartRound(GameState& rGame)
+{
     if (!SetupPlayerTurnState(rGame.current_turn, rGame, rGame.first_player_idx)) {
         return false;
     }
@@ -79,11 +84,11 @@ bool lv::GameEngine::AllocateDices(GameState& rGame, DiceValue dice)
     // Get the dice's casino
     CasinoState &rCasino = rGame.casinos[static_cast<CasinoIdx>(dice) - 1];
 
-    auto allocate_fn = [&](std::vector<DiceValue> &rDices, int32_t &rCasino_bet, int32_t rPlayer_dices) {
+    auto allocate_fn = [&](std::vector<DiceValue> &rDices, int32_t &rCasino_bet, int32_t& rPlayer_dices) {
         uint32_t dices_allocated = 0;
 
         // Iterate through the current turn's dices and find the one matching the dice value
-        for (DiceValue &rDice : rGame.current_turn.dices) {
+        for (DiceValue &rDice : rDices) {
             if (rDice == dice) {
                 ++dices_allocated;
                 ++rCasino_bet;
@@ -128,7 +133,7 @@ bool lv::GameEngine::IsRoundOver(const GameState& rGame) const
 bool lv::GameEngine::IsGameOver(const GameState& rGame) const
 {
     // Game is over if this is the last round
-    if (rGame.round + 1 >= ROUND_COUNT) {
+    if (rGame.round >= ROUND_COUNT) {
         return true;
     }
     return false;
@@ -146,64 +151,26 @@ bool lv::GameEngine::AdvanceToNextPlayer(GameState& rGame)
 
         if (rPlayer.dices > 0 || rPlayer.white_dices > 0)
         {
+            rGame.current_turn.player_idx = next_player_idx;
+            if (!SetupPlayerTurnState(rGame.current_turn, rGame, rGame.current_turn.player_idx)) {
+                return false;
+            }
+
             return true;
         }
+        next_player_idx = (next_player_idx + 1) % rGame.players.size();
     }
 
     return false; // We got back to first player, logic error
 }
 
-bool lv::GameEngine::DistributeCasinoBills(GameState& rGame)
+bool lv::GameEngine::EndRound(GameState& rGame)
 {
-    // Go through all casinos
-    for (CasinoState &rCasino : rGame.casinos) {
-
-        // Sort bills in ascending order
-        std::sort(rCasino.bills.begin(), rCasino.bills.end(), std::greater<Bill>());
-
-        bool more_to_distribute = true;
-        while (more_to_distribute)
-        {
-            // Check if there are no more bills to distribute
-            if (rCasino.bills.empty()) {
-                more_to_distribute = false;
-                break;
-            }
-
-            // Take the bill with highest value
-            Bill highest_bill = rCasino.bills.back();
-            rCasino.bills.pop_back();
-
-            // Find the player with the highest bet
-            int32_t highest_bet = 0;
-            enum {INVALID_PLAYER_IDX = -1};
-            PlayerIdx highest_bet_player_idx = INVALID_PLAYER_IDX;
-            for (PlayerIdx player_idx = 0; player_idx < rGame.players.size(); ++player_idx) {
-                if (rCasino.dice_bets[player_idx] > highest_bet) {
-                    highest_bet = rCasino.dice_bets[player_idx];
-                    highest_bet_player_idx = player_idx;
-                }
-            }
-
-            // Check if the neutral player has the highest bet
-            bool highest_bet_neutral = false;
-            if (rCasino.neutral_dice_bet > highest_bet) {
-                highest_bet = rCasino.neutral_dice_bet;
-                highest_bet_neutral = true;
-            }
-
-            // Was there any bet ?
-            if (highest_bet_player_idx == INVALID_PLAYER_IDX && !highest_bet_neutral) {
-                more_to_distribute = false;
-                break;
-            } else {
-                // Add bill to highest player's money
-                if (!highest_bet_neutral) {
-                    rGame.players[highest_bet_player_idx].bills.push_back(highest_bill);
-                }
-            }
-        }
+    if (!DistributeCasinoBills(rGame)) {
+        return false;
     }
+
+    ++rGame.round;
 
     return true;
 }
@@ -215,6 +182,10 @@ bool lv::GameEngine::SetupCasinoBills(GameState& rGame)
         rCasino.bills.clear();
         int32_t current_value = 0;
         while (current_value < CASINO_MIN_MONEY_VALUE) {
+            if (rGame.bank.empty()) {
+                return false;
+            }
+
             rCasino.bills.push_back(rGame.bank.back());
             rGame.bank.pop_back();
             current_value += static_cast<int32_t>(rCasino.bills.back());
@@ -268,4 +239,88 @@ void lv::GameEngine::ShuffleBank(std::vector<Bill>& rBank) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::shuffle(rBank.begin(), rBank.end(), gen);
+}
+
+bool lv::GameEngine::DistributeCasinoBills(GameState& rGame)
+{
+    // Go through all casinos
+    for (CasinoState &rCasino : rGame.casinos) {
+
+        // Sort bills in ascending order
+        std::sort(rCasino.bills.begin(), rCasino.bills.end());
+
+        bool more_to_distribute = true;
+        while (more_to_distribute)
+        {
+            // Check if there are no more bills to distribute
+            if (rCasino.bills.empty()) {
+                more_to_distribute = false;
+                break;
+            }
+
+            // Take the bill with highest value
+            Bill highest_bill = rCasino.bills.back();
+            rCasino.bills.pop_back();
+
+            // Cancel all equal bets
+            // Start by cancelling the neutral bet
+            if (rCasino.neutral_dice_bet > 0) {
+                bool neutral_bet_canceled = false;
+                for (PlayerIdx player_idx = 0; player_idx < rGame.players.size(); ++player_idx) {
+                    if (rCasino.dice_bets[player_idx] == rCasino.neutral_dice_bet) {
+                        rCasino.dice_bets[player_idx] = 0;
+                        neutral_bet_canceled = true;
+                    }
+                }
+                if (neutral_bet_canceled) {
+                    rCasino.neutral_dice_bet = 0;
+                }
+            }
+
+            // Cancel equal player bets
+            for (PlayerIdx player_idx = 0; player_idx < rGame.players.size(); ++player_idx) {
+                int32_t bet = rCasino.dice_bets[player_idx];
+                if (bet > 0) {
+                    for (PlayerIdx other_player_idx = player_idx + 1; other_player_idx < rGame.players.size();
+                         ++other_player_idx) {
+                        if (bet == rCasino.dice_bets[other_player_idx]) {
+                            rCasino.dice_bets[player_idx] = 0;
+                            rCasino.dice_bets[other_player_idx] = 0;
+                        }
+                    }
+                }
+            }
+
+            // Find the player with the highest bet
+            int32_t highest_bet = 0;
+            enum {INVALID_PLAYER_IDX = -1};
+            PlayerIdx highest_bet_player_idx = INVALID_PLAYER_IDX;
+            for (PlayerIdx player_idx = 0; player_idx < rGame.players.size(); ++player_idx) {
+                if (rCasino.dice_bets[player_idx] > highest_bet) {
+                    highest_bet = rCasino.dice_bets[player_idx];
+                    highest_bet_player_idx = player_idx;
+                }
+            }
+
+            // Check if the neutral player has the highest bet
+            bool highest_bet_neutral = false;
+            if (rCasino.neutral_dice_bet > highest_bet) {
+                highest_bet = rCasino.neutral_dice_bet;
+                highest_bet_neutral = true;
+            }
+
+            // Was there any bet ?
+            if (highest_bet_player_idx == INVALID_PLAYER_IDX && !highest_bet_neutral) {
+                more_to_distribute = false;
+                break;
+            } else {
+                // Add bill to highest player's money
+                if (!highest_bet_neutral) {
+                    rGame.players[highest_bet_player_idx].bills.push_back(highest_bill);
+                }
+            }
+        }
+    }
+
+    return true;
 }
