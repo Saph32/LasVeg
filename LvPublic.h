@@ -70,7 +70,7 @@ struct CasinoState {
     CasinoIdx idx = 0;
     DiceValue dice = DiceValue::Invalid;
     std::vector<Bill> bills;
-    std::array<int32_t, MAX_PLAYER_COUNT> dice_bets;
+    std::array<int32_t, MAX_PLAYER_COUNT> dice_bets{};
     int32_t neutral_dice_bet = 0;
 };
 
